@@ -7,14 +7,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Add the configgen module to the path
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Import from batocera's configgen
 from configgen.batoceraPaths import SAVES
 from configgen.Emulator import Emulator
 from configgen.utils.logger import setup_logging
-import configgen.controllersConfig as controllers
+from configgen.controller import Controller
+from configgen.gun import Gun
 from generators.GeneratorImporter import getGenerator
 
 eslog = logging.getLogger(__name__)
@@ -23,22 +22,7 @@ def main(args, maxnbplayers):
     return start_rom(args, maxnbplayers, args.rom, args.rom)
 
 def start_rom(args, maxnbplayers, rom, romConfiguration):
-    playersControllers = {}
-    
-    controllersInput = []
-    for p in range(1, maxnbplayers + 1):
-        ci = {
-            "index": getattr(args, f"p{p}index"),
-            "guid": getattr(args, f"p{p}guid"),
-            "name": getattr(args, f"p{p}name"),
-            "devicepath": getattr(args, f"p{p}devicepath"),
-            "nbbuttons": getattr(args, f"p{p}nbbuttons"),
-            "nbhats": getattr(args, f"p{p}nbhats"),
-            "nbaxes": getattr(args, f"p{p}nbaxes")
-        }
-        controllersInput.append(ci)
-    
-    playersControllers = controllers.loadControllerConfig(controllersInput)
+    playersControllers = Controller.load_for_players(maxnbplayers, args)
     
     systemName = args.system
     eslog.debug(f"Running system: {systemName}")
@@ -51,7 +35,7 @@ def start_rom(args, maxnbplayers, rom, romConfiguration):
         system.config["core"] = args.core
         system.config["core-forced"] = True
     
-    debugDisplay = system.config.copy()
+    debugDisplay = dict(system.config)
     if "retroachievements.password" in debugDisplay:
         debugDisplay["retroachievements.password"] = "***"
     eslog.debug(f"Settings: {debugDisplay}")
@@ -60,10 +44,20 @@ def start_rom(args, maxnbplayers, rom, romConfiguration):
     else:
         if "emulator" in system.config:
             eslog.debug("emulator: {}".format(system.config["emulator"]))
-    
+
     metadata = {}
-    guns = []  # Temporary
-    wheels = []
+    
+    if args.lightgun:
+        system.config["use_guns"] = True
+    
+    if system.config.get('use_guns') and system.config.use_guns:
+        guns = Gun.get_and_precalibrate_all(system, rom)
+        eslog.info(f"Found {len(guns)} gun(s) for Xbox")
+    else:
+        eslog.info("Guns disabled for Xbox")
+        guns = []
+    
+    wheels: dict = {}
     
     from configgen.utils import videoMode
     gameResolution = videoMode.getCurrentResolution()
@@ -71,7 +65,12 @@ def start_rom(args, maxnbplayers, rom, romConfiguration):
     dirname = SAVES / system.name
     if not dirname.exists():
         dirname.mkdir(parents=True)
-    generator = getGenerator(system.config['emulator'], system.config.get('core'))
+    
+    core = system.config.get('core')
+    if core is None or not isinstance(core, str):
+        core = None
+    
+    generator = getGenerator(system.config['emulator'], core)
     cmd = generator.generate(system, Path(rom), playersControllers, metadata, guns, wheels, gameResolution)
     exitCode = runCommand(cmd)
     
@@ -126,6 +125,8 @@ def launch():
         parser.add_argument("-core", help="force emulator core", type=str, required=False)
         parser.add_argument("-systemname", help="system fancy name", type=str, required=False)
         parser.add_argument("-gameinfoxml", help="game info xml", type=str, nargs='?', default='/dev/null', required=False)
+        parser.add_argument("-lightgun", help="configure lightguns", action="store_true")
+        parser.add_argument("-wheel", help="configure wheel", action="store_true")
         
         args = parser.parse_args()
         
