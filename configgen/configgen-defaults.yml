@@ -1,0 +1,25 @@
+# Xbox emulator configuration defaults
+default:
+  emulator: xemu
+  core: xemu
+  options:
+    videomode: default
+    forceNoBezel: true
+
+xbox:
+  emulator: xemu
+  core: xemu
+  options:
+    # Video options
+    cxbxr_fullscreen: true
+    cxbxr_vsync: false
+    cxbxr_aspect: true
+    cxbxr_render_scale: '1'
+    
+    # Debug options
+    cxbxr_debug: false
+    cxbxr_lle_gpu: false
+    
+    # General options
+    videomode: default
+    forceNoBezel: true
