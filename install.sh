@@ -48,20 +48,19 @@ wget -q --show-progress -O "${TEMP_DIR}/xemu-win-x86_64-release.zip" \
 
 echo -e "${YELLOW}[5/6]${NC} Installing files..."
 echo "  - Installing launcher scripts..."
-cp -r "${SOURCE_DIR}/configgen" /userdata/system/xbox-extra/
+cp -rf "${SOURCE_DIR}/configgen" /userdata/system/xbox-extra/
 chmod +x /userdata/system/xbox-extra/configgen/xboxlauncher.py
 
 echo "  - Installing ES Systems configuration..."
-cp "${SOURCE_DIR}/es_systems_xbox.cfg" /userdata/system/configs/emulationstation/
+cp -f "${SOURCE_DIR}/es_systems_xbox.cfg" /userdata/system/configs/emulationstation/
 
 echo "  - Extracting Cxbx-Reloaded..."
 mkdir -p /userdata/system/xbox-extra/cxbx-r/app
-unzip -q "${TEMP_DIR}/CxbxReloaded-Release.zip" -d /userdata/system/xbox-extra/cxbx-r/app
+unzip -q -o "${TEMP_DIR}/CxbxReloaded-Release.zip" -d /userdata/system/xbox-extra/cxbx-r/app
 
 echo "  - Extracting xemu..."
 mkdir -p /userdata/system/xbox-extra/xemu-wine/app
-unzip -q "${TEMP_DIR}/xemu-win-x86_64-release.zip" -d /userdata/system/xbox-extra/xemu-wine/app
-
+unzip -q -o "${TEMP_DIR}/xemu-win-x86_64-release.zip" -d /userdata/system/xbox-extra/xemu-wine/app
 echo -e "${YELLOW}[6/6]${NC} Cleaning up..."
 
 echo ""
