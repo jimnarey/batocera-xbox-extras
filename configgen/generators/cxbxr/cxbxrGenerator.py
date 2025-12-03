@@ -31,7 +31,7 @@ class CxbxrGenerator(Generator):
         """Generate the command to run Cxbx-Reloaded"""
         wine_runner = wine.Runner.default('cxbx-r')
         cxbxr_app = XBOX_EXTRA / 'cxbx-r' / 'app'
-        cxbxr_exe = cxbxr_app / 'cxbxr.exe'
+        cxbxr_exe = cxbxr_app / 'cxbx.exe'
         settings_file = cxbxr_app / 'settings.ini'
         mkdir_if_not_exists(wine_runner.bottle_dir)
         if not cxbxr_exe.exists():
