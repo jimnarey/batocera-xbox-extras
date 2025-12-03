@@ -39,8 +39,7 @@ class CxbxrGenerator(Generator):
                 f"Cxbx-Reloaded not found at {cxbxr_exe}. "
                 f"Please run the install script first."
             )
-        
-        os.environ['WINEARCH'] = 'win32'
+        os.environ['WINEARCH'] = 'win64'
         _logger.info("Installing Wine dependencies for Cxbx-Reloaded...")
         wine_runner.install_wine_trick('vcrun2015')
         wine_runner.install_wine_trick('d3dx9')
