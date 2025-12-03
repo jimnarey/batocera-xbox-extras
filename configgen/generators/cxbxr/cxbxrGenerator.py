@@ -12,6 +12,7 @@ from configgen import Command
 from configgen.batoceraPaths import mkdir_if_not_exists
 from configgen.controller import generate_sdl_game_controller_config
 from configgen.utils import wine
+from configgen.utils.wine import WINE_BASE
 from configgen.utils.configparser import CaseSensitiveConfigParser
 from configgen.generators.Generator import Generator
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 XBOX_EXTRA: Final = Path('/userdata/system/xbox-extra')
+BATOCERA_LOGDIR : Final = Path('/userdata/system/logs')
 ISO_EXTRACT_BASE: Final = XBOX_EXTRA / 'iso-extracts'
 EXTRACT_XISO_BIN: Final = XBOX_EXTRA / 'bin' / 'extract-xiso'
 
@@ -45,14 +47,12 @@ class CxbxrGenerator(Generator):
                 f"extract-xiso not found at {EXTRACT_XISO_BIN}. "
                 f"Please run the install script first."
             )
-        
-        # Set up paths - wine prefix is in same directory as app
+
         cxbxr_base = XBOX_EXTRA / 'cxbx-r'
         cxbxr_app = cxbxr_base / 'app'
-        cxbxr_exe = cxbxr_app / 'cxbx.exe'
+        cxbxr_exe = cxbxr_app / 'cxbxr-ldr.exe'
         settings_file = cxbxr_app / 'settings.ini'
         
-        # Create Wine runner - set bottle_dir to cxbxr_base
         wine_runner = wine.Runner.default('cxbx-r')
         wine_runner.bottle_dir = cxbxr_base
         
@@ -63,20 +63,15 @@ class CxbxrGenerator(Generator):
                 f"Please run the install script first."
             )
         
-        # Cxbx-Reloaded is a 32-bit app but requires WoW64, so use win64 prefix
         os.environ['WINEARCH'] = 'win64'
-        _logger.info("Installing Wine dependencies for Cxbx-Reloaded...")
-        wine_runner.install_wine_trick('vcrun2015')
-        wine_runner.install_wine_trick('d3dx9')
-        wine_runner.install_wine_trick('d3dcompiler_43')
-        wine_runner.install_wine_trick('d3dcompiler_47')
+        
+        self._initialize_wine_prefix(wine_runner)
         
         self._configure_settings(settings_file, system, gameResolution)
         
         rom_path = Path(rom)
         xbe_path: Path
         
-        # Handle ISO files - extract and find default.xbe
         if rom_path.suffix.lower() == '.iso':
             extract_dir = self._get_extract_dir(rom_path)
             
@@ -85,10 +80,8 @@ class CxbxrGenerator(Generator):
             self._extracted_iso = rom_path
             self._extract_dir = extract_dir
             
-            # Find default.xbe in extracted directory
             xbe_path = extract_dir / 'default.xbe'
             if not xbe_path.exists():
-                # Try case-insensitive search
                 for file in extract_dir.rglob('*'):
                     if file.is_file() and file.name.lower() == 'default.xbe':
                         xbe_path = file
@@ -103,7 +96,12 @@ class CxbxrGenerator(Generator):
         else:
             raise Exception(f"Unsupported ROM format: {rom_path.suffix}. Cxbx-Reloaded requires .xbe or .iso files.")
         
-        commandArray: list[str | Path] = [wine_runner.wine, cxbxr_exe, f'Z:{xbe_path}']
+        commandArray: list[str | Path] = [
+            wine_runner.wine, 
+            cxbxr_exe, 
+            '/load', 
+            f'Z:{xbe_path}'
+        ]
         
         environment = wine_runner.get_environment()
         environment.update({
@@ -124,19 +122,24 @@ class CxbxrGenerator(Generator):
         
         _logger.debug(f"Cxbx-Reloaded command: {commandArray}")
         
-        # Wrap the command to ensure cleanup after execution
         return self._wrap_with_cleanup(Command.Command(array=commandArray, env=environment))
     
     def _get_extract_dir(self, iso_path: Path) -> Path:
         """Generate a temporary extraction directory path based on ISO filename"""
-        # Use first 8 chars of MD5 hash of the ISO path for uniqueness
         path_hash = hashlib.md5(str(iso_path).encode()).hexdigest()[:8]
-        # Sanitize the ISO stem (filename without extension)
         safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in iso_path.stem)
         extract_name = f"{safe_name}_{path_hash}"
         extract_dir = ISO_EXTRACT_BASE / extract_name
         mkdir_if_not_exists(ISO_EXTRACT_BASE)
         return extract_dir
+    
+    def _initialize_wine_prefix(self, wine_runner) -> None:
+        """Install Wine dependencies. Prefix is created automatically by winetricks."""
+        
+        # Install dependencies - this will create the prefix if it doesn't exist
+        _logger.info("Installing Wine dependencies (vcrun2019, d3dcompiler_47)...")
+        wine_runner.install_wine_trick('vcrun2019')
+        wine_runner.install_wine_trick('d3dcompiler_47')
     
     def _extract_iso(self, iso_path: Path, extract_dir: Path) -> None:
         """Extract an Xbox ISO file using extract-xiso"""
@@ -170,7 +173,6 @@ class CxbxrGenerator(Generator):
     def _wrap_with_cleanup(self, command: Command.Command) -> Command.Command:
         """Wrap the command to ensure cleanup happens after execution"""
         if self._extract_dir:
-            # Create a wrapper script that ensures cleanup
             wrapper_script = XBOX_EXTRA / 'cxbx-wrapper.sh'
             wrapper_content = f'''#!/bin/bash
 # Auto-generated wrapper for Cxbx-Reloaded with ISO cleanup
@@ -189,7 +191,6 @@ exit $EXIT_CODE
             wrapper_script.write_text(wrapper_content)
             wrapper_script.chmod(0o755)
             
-            # Return a new command that runs the wrapper
             return Command.Command(
                 array=['/bin/bash', str(wrapper_script)],
                 env=command.env
@@ -211,38 +212,13 @@ exit $EXIT_CODE
         for section in ['gui', 'core', 'video', 'audio', 'input-general']:
             if not config.has_section(section):
                 config.add_section(section)
-        
-        if system.isOptSet('cxbxr_fullscreen'):
-            config.set('video', 'FullScreen', 'true' if system.getOptBoolean('cxbxr_fullscreen') else 'false')
-        else:
-            config.set('video', 'FullScreen', 'true')
-        
-        if system.isOptSet('cxbxr_resolution'):
-            resolution = system.config['cxbxr_resolution']
-            config.set('video', 'VideoResolution', resolution)
-        else:
-            config.set('video', 'VideoResolution', f"{gameResolution['width']}x{gameResolution['height']}")
-        
-        if system.isOptSet('cxbxr_vsync'):
-            config.set('video', 'VSync', 'true' if system.getOptBoolean('cxbxr_vsync') else 'false')
-        else:
-            config.set('video', 'VSync', 'false')
-        
-        if system.isOptSet('cxbxr_aspect'):
-            config.set('video', 'MaintainAspect', 'true' if system.getOptBoolean('cxbxr_aspect') else 'false')
-        else:
-            config.set('video', 'MaintainAspect', 'true')
-        
-        if system.isOptSet('cxbxr_render_scale'):
-            config.set('video', 'RenderResolution', system.config['cxbxr_render_scale'])
-        
+                        
         if system.isOptSet('cxbxr_debug'):
             debug_mode = '1' if system.getOptBoolean('cxbxr_debug') else '0'
             config.set('gui', 'CxbxDebugMode', debug_mode)
+            config.set('gui', 'CxbxDebugLogFile', str(BATOCERA_LOGDIR / 'cxbx-gui-debug.log'))
             config.set('core', 'KrnlDebugMode', debug_mode)
-        
-        if system.isOptSet('cxbxr_lle_gpu'):
-            config.set('core', 'FlagsLLE', '0x1' if system.getOptBoolean('cxbxr_lle_gpu') else '0x0')
+            config.set('core', 'KrnlDebugLogFile', str(BATOCERA_LOGDIR / 'cxbx-kernel-debug.log'))
         
         with settings_file.open('w') as configfile:
             config.write(configfile)

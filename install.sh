@@ -58,6 +58,7 @@ chmod +x /userdata/system/xbox-extra/configgen/xboxlauncher.py
 
 echo "  - Installing ES Systems configuration..."
 cp -f "${SOURCE_DIR}/es_systems_xbox.cfg" /userdata/system/configs/emulationstation/
+cp -f "${SOURCE_DIR}/es_features_xbox.cfg" /userdata/system/configs/emulationstation/
 
 echo "  - Extracting Cxbx-Reloaded..."
 mkdir -p /userdata/system/xbox-extra/cxbx-r/app

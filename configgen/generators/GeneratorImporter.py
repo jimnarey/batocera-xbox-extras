@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 def getGenerator(emulator: str, core: str | None = None) -> Generator:
     """Import and return the appropriate generator class based on emulator and core."""
-    if emulator == 'cxbx-r' or (core and core == 'cxbxr'):
+    if emulator == 'cxbx-r' or (core and core == 'cxbx-r'):
         from .cxbxr.cxbxrGenerator import CxbxrGenerator
         return CxbxrGenerator()
     
