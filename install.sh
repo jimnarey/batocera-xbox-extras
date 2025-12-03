@@ -46,6 +46,10 @@ echo "  - Downloading xemu (Windows)..."
 wget -q --show-progress -O "${TEMP_DIR}/xemu-win-x86_64-release.zip" \
     https://github.com/xemu-project/xemu/releases/latest/download/xemu-win-x86_64-release.zip
 
+echo "  - Downloading extract-xiso (Xbox ISO extraction tool)..."
+wget -q --show-progress -O "${TEMP_DIR}/extract-xiso.zip" \
+    https://github.com/XboxDev/extract-xiso/releases/download/build-202505152050/extract-xiso_Linux.zip
+
 echo -e "${YELLOW}[5/6]${NC} Installing files..."
 echo "  - Installing launcher scripts..."
 cp -rf "${SOURCE_DIR}/configgen" /userdata/system/xbox-extra/
@@ -61,6 +65,12 @@ unzip -q -o "${TEMP_DIR}/CxbxReloaded-Release.zip" -d /userdata/system/xbox-extr
 echo "  - Extracting xemu..."
 mkdir -p /userdata/system/xbox-extra/xemu-wine/app
 unzip -q -o "${TEMP_DIR}/xemu-win-x86_64-release.zip" -d /userdata/system/xbox-extra/xemu-wine/app
+
+echo "  - Installing extract-xiso to /usr/bin..."
+unzip -q "${TEMP_DIR}/extract-xiso.zip" -d "${TEMP_DIR}/extract-xiso-temp"
+cp -f "${TEMP_DIR}/extract-xiso-temp/extract-xiso" /usr/bin/extract-xiso
+chmod +x /usr/bin/extract-xiso
+
 echo -e "${YELLOW}[6/6]${NC} Cleaning up..."
 
 echo ""
@@ -73,6 +83,7 @@ echo "  ✓ Cxbx-Reloaded (Wine-based Xbox emulator)"
 echo "  ✓ xemu-wine (Windows build of xemu)"
 echo "  ✓ Xbox launcher scripts"
 echo "  ✓ EmulationStation configuration"
+echo "  ✓ extract-xiso (Xbox ISO extraction tool)"
 echo ""
 echo "Next steps:"
 echo "  1. Restart EmulationStation:"

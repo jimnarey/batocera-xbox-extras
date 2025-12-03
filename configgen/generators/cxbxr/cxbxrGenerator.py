@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import hashlib
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -20,14 +21,15 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 XBOX_EXTRA: Final = Path('/userdata/system/xbox-extra')
-ISO_MOUNT_BASE: Final = XBOX_EXTRA / 'iso-mounts'
+ISO_EXTRACT_BASE: Final = XBOX_EXTRA / 'iso-extracts'
+EXTRACT_XISO_BIN: Final = Path('/usr/bin/extract-xiso')
 
 class CxbxrGenerator(Generator):
     
     def __init__(self):
         super().__init__()
-        self._mounted_iso: Path | None = None
-        self._mount_point: Path | None = None
+        self._extracted_iso: Path | None = None
+        self._extract_dir: Path | None = None
     
     def getHotkeysContext(self) -> HotkeysContext:
         return {
@@ -37,6 +39,13 @@ class CxbxrGenerator(Generator):
     
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
         """Generate the command to run Cxbx-Reloaded"""
+        # Verify extract-xiso is installed
+        if not EXTRACT_XISO_BIN.exists():
+            raise Exception(
+                f"extract-xiso not found at {EXTRACT_XISO_BIN}. "
+                f"Please run the install script first."
+            )
+        
         wine_runner = wine.Runner.default('cxbx-r')
         cxbxr_app = XBOX_EXTRA / 'cxbx-r' / 'app'
         cxbxr_exe = cxbxr_app / 'cxbx.exe'
@@ -48,6 +57,8 @@ class CxbxrGenerator(Generator):
                 f"Cxbx-Reloaded not found at {cxbxr_exe}. "
                 f"Please run the install script first."
             )
+        
+        # Cxbx-Reloaded is a 32-bit app but requires WoW64, so use win64 prefix
         os.environ['WINEARCH'] = 'win64'
         _logger.info("Installing Wine dependencies for Cxbx-Reloaded...")
         wine_runner.install_wine_trick('vcrun2015')
@@ -60,30 +71,26 @@ class CxbxrGenerator(Generator):
         rom_path = Path(rom)
         xbe_path: Path
         
-        # Handle ISO files - mount and find default.xbe
+        # Handle ISO files - extract and find default.xbe
         if rom_path.suffix.lower() == '.iso':
-            mount_point = self._get_mount_point(rom_path)
+            extract_dir = self._get_extract_dir(rom_path)
             
-            # Check if already mounted
-            if self._is_mounted(mount_point):
-                _logger.info(f"ISO already mounted at {mount_point}")
-            else:
-                _logger.info(f"Mounting ISO {rom_path} to {mount_point}")
-                self._mount_iso(rom_path, mount_point)
-                self._mounted_iso = rom_path
-                self._mount_point = mount_point
+            _logger.info(f"Extracting Xbox ISO {rom_path} to {extract_dir}")
+            self._extract_iso(rom_path, extract_dir)
+            self._extracted_iso = rom_path
+            self._extract_dir = extract_dir
             
-            # Find default.xbe in mount point
-            xbe_path = mount_point / 'default.xbe'
+            # Find default.xbe in extracted directory
+            xbe_path = extract_dir / 'default.xbe'
             if not xbe_path.exists():
                 # Try case-insensitive search
-                for file in mount_point.iterdir():
-                    if file.name.lower() == 'default.xbe':
+                for file in extract_dir.rglob('*'):
+                    if file.is_file() and file.name.lower() == 'default.xbe':
                         xbe_path = file
                         break
                 else:
-                    self._cleanup_mount()
-                    raise Exception(f"default.xbe not found in ISO at {mount_point}")
+                    self._cleanup_extraction()
+                    raise Exception(f"default.xbe not found in extracted ISO at {extract_dir}")
         
         elif rom_path.suffix.lower() == '.xbe':
             xbe_path = rom_path
@@ -115,72 +122,49 @@ class CxbxrGenerator(Generator):
         # Wrap the command to ensure cleanup after execution
         return self._wrap_with_cleanup(Command.Command(array=commandArray, env=environment))
     
-    def _get_mount_point(self, iso_path: Path) -> Path:
-        """Generate a predictable mount point path based on ISO filename"""
+    def _get_extract_dir(self, iso_path: Path) -> Path:
+        """Generate a temporary extraction directory path based on ISO filename"""
         # Use first 8 chars of MD5 hash of the ISO path for uniqueness
         path_hash = hashlib.md5(str(iso_path).encode()).hexdigest()[:8]
         # Sanitize the ISO stem (filename without extension)
         safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in iso_path.stem)
-        mount_name = f"{safe_name}_{path_hash}"
-        mount_point = ISO_MOUNT_BASE / mount_name
-        mkdir_if_not_exists(ISO_MOUNT_BASE)
-        return mount_point
+        extract_name = f"{safe_name}_{path_hash}"
+        extract_dir = ISO_EXTRACT_BASE / extract_name
+        mkdir_if_not_exists(ISO_EXTRACT_BASE)
+        return extract_dir
     
-    def _is_mounted(self, mount_point: Path) -> bool:
-        """Check if the mount point is already mounted"""
+    def _extract_iso(self, iso_path: Path, extract_dir: Path) -> None:
+        """Extract an Xbox ISO file using extract-xiso"""
+        mkdir_if_not_exists(extract_dir)
+        
         try:
+            _logger.info(f"Running extract-xiso on {iso_path}")
             result = subprocess.run(
-                ['mountpoint', '-q', str(mount_point)],
-                capture_output=True
-            )
-            return result.returncode == 0
-        except Exception as e:
-            _logger.warning(f"Error checking mount point: {e}")
-            return False
-    
-    def _mount_iso(self, iso_path: Path, mount_point: Path) -> None:
-        """Mount an ISO file to the specified mount point"""
-        mkdir_if_not_exists(mount_point)
-        
-        try:
-            subprocess.run(
-                ['mount', '-o', 'loop,ro', str(iso_path), str(mount_point)],
+                [str(EXTRACT_XISO_BIN), '-d', str(extract_dir), str(iso_path)],
                 check=True,
                 capture_output=True,
                 text=True
             )
-            _logger.info(f"Successfully mounted {iso_path} to {mount_point}")
+            _logger.info(f"Successfully extracted {iso_path} to {extract_dir}")
+            if result.stdout:
+                _logger.debug(f"extract-xiso output: {result.stdout}")
         except subprocess.CalledProcessError as e:
-            raise Exception(f"Failed to mount ISO: {e.stderr}")
+            raise Exception(f"Failed to extract Xbox ISO: {e.stderr if e.stderr else str(e)}")
     
-    def _unmount_iso(self, mount_point: Path) -> None:
-        """Unmount an ISO from the specified mount point"""
-        if not self._is_mounted(mount_point):
-            _logger.debug(f"Mount point {mount_point} not mounted, skipping unmount")
-            return
-        
-        try:
-            subprocess.run(
-                ['umount', str(mount_point)],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            _logger.info(f"Successfully unmounted {mount_point}")
-        except subprocess.CalledProcessError as e:
-            _logger.error(f"Failed to unmount {mount_point}: {e.stderr}")
-    
-    def _cleanup_mount(self) -> None:
-        """Clean up any mounted ISO after emulator exit"""
-        if self._mount_point and self._mounted_iso:
-            _logger.info(f"Cleaning up mount for {self._mounted_iso}")
-            self._unmount_iso(self._mount_point)
-            self._mounted_iso = None
-            self._mount_point = None
+    def _cleanup_extraction(self) -> None:
+        """Clean up extracted ISO directory after emulator exit"""
+        if self._extract_dir and self._extract_dir.exists():
+            _logger.info(f"Cleaning up extracted ISO at {self._extract_dir}")
+            try:
+                shutil.rmtree(self._extract_dir)
+                self._extracted_iso = None
+                self._extract_dir = None
+            except Exception as e:
+                _logger.error(f"Failed to cleanup extraction directory {self._extract_dir}: {e}")
     
     def _wrap_with_cleanup(self, command: Command.Command) -> Command.Command:
         """Wrap the command to ensure cleanup happens after execution"""
-        if self._mount_point:
+        if self._extract_dir:
             # Create a wrapper script that ensures cleanup
             wrapper_script = XBOX_EXTRA / 'cxbx-wrapper.sh'
             wrapper_content = f'''#!/bin/bash
@@ -190,9 +174,9 @@ class CxbxrGenerator(Generator):
 {' '.join(str(arg) for arg in command.array)}
 EXIT_CODE=$?
 
-# Cleanup mount
-if mountpoint -q "{self._mount_point}"; then
-    umount "{self._mount_point}" 2>/dev/null || true
+# Cleanup extracted ISO
+if [ -d "{self._extract_dir}" ]; then
+    rm -rf "{self._extract_dir}" 2>/dev/null || true
 fi
 
 exit $EXIT_CODE
