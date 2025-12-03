@@ -26,7 +26,7 @@ def start_rom(args, maxnbplayers, rom, romConfiguration):
     
     systemName = args.system
     eslog.debug(f"Running system: {systemName}")
-    system = Emulator(systemName, romConfiguration)
+    system = Emulator(args, romConfiguration)
     
     if args.emulator is not None:
         system.config["emulator"] = args.emulator
@@ -120,7 +120,7 @@ def launch():
             parser.add_argument(f"-p{p}nbaxes", help=f"player{p} controller number of axes", type=str, required=False)
         
         parser.add_argument("-system", help="select the system to launch", type=str, required=True)
-        parser.add_argument("-rom", help="rom absolute path", type=str, required=True)
+        parser.add_argument("-rom", help="rom absolute path", type=Path, required=True)
         parser.add_argument("-emulator", help="force emulator", type=str, required=False)
         parser.add_argument("-core", help="force emulator core", type=str, required=False)
         parser.add_argument("-systemname", help="system fancy name", type=str, required=False)
