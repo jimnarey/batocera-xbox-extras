@@ -22,7 +22,7 @@ _logger = logging.getLogger(__name__)
 
 XBOX_EXTRA: Final = Path('/userdata/system/xbox-extra')
 ISO_EXTRACT_BASE: Final = XBOX_EXTRA / 'iso-extracts'
-EXTRACT_XISO_BIN: Final = Path('/usr/bin/extract-xiso')
+EXTRACT_XISO_BIN: Final = XBOX_EXTRA / 'bin' / 'extract-xiso'
 
 class CxbxrGenerator(Generator):
     
@@ -46,10 +46,15 @@ class CxbxrGenerator(Generator):
                 f"Please run the install script first."
             )
         
-        wine_runner = wine.Runner.default('cxbx-r')
-        cxbxr_app = XBOX_EXTRA / 'cxbx-r' / 'app'
+        # Set up paths - wine prefix is in same directory as app
+        cxbxr_base = XBOX_EXTRA / 'cxbx-r'
+        cxbxr_app = cxbxr_base / 'app'
         cxbxr_exe = cxbxr_app / 'cxbx.exe'
         settings_file = cxbxr_app / 'settings.ini'
+        
+        # Create Wine runner - set bottle_dir to cxbxr_base
+        wine_runner = wine.Runner.default('cxbx-r')
+        wine_runner.bottle_dir = cxbxr_base
         
         mkdir_if_not_exists(wine_runner.bottle_dir)
         if not cxbxr_exe.exists():

@@ -26,6 +26,7 @@ trap "rm -rf ${TEMP_DIR}" EXIT
 
 echo -e "${YELLOW}[1/6]${NC} Creating directories..."
 mkdir -p /userdata/system/xbox-extra
+mkdir -p /userdata/system/xbox-extra/bin
 mkdir -p /userdata/system/configs/emulationstation
 
 echo -e "${YELLOW}[2/6]${NC} Downloading source code from GitHub..."
@@ -66,10 +67,10 @@ echo "  - Extracting xemu..."
 mkdir -p /userdata/system/xbox-extra/xemu-wine/app
 unzip -q -o "${TEMP_DIR}/xemu-win-x86_64-release.zip" -d /userdata/system/xbox-extra/xemu-wine/app
 
-echo "  - Installing extract-xiso to /usr/bin..."
+echo "  - Installing extract-xiso to /userdata/system/xbox-extra/bin..."
 unzip -q "${TEMP_DIR}/extract-xiso.zip" -d "${TEMP_DIR}/extract-xiso-temp"
-cp -f "${TEMP_DIR}/extract-xiso-temp/extract-xiso" /usr/bin/extract-xiso
-chmod +x /usr/bin/extract-xiso
+cp -f "${TEMP_DIR}/extract-xiso-temp/extract-xiso" /userdata/system/xbox-extra/bin/extract-xiso
+chmod +x /userdata/system/xbox-extra/bin/extract-xiso
 
 echo -e "${YELLOW}[6/6]${NC} Cleaning up..."
 
