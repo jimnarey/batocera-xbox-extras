@@ -53,7 +53,7 @@ class CxbxrGenerator(Generator):
         cxbxr_exe = cxbxr_app / 'cxbxr-ldr.exe'
         settings_file = cxbxr_app / 'settings.ini'
         
-        wine_runner = wine.Runner.default('cxbx-r')
+        wine_runner = wine.Runner('wine-proton', 'cxbx-r')
         wine_runner.bottle_dir = cxbxr_base
         
         mkdir_if_not_exists(wine_runner.bottle_dir)
