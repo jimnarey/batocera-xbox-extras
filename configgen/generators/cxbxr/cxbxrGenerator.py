@@ -97,11 +97,21 @@ class CxbxrGenerator(Generator):
             raise Exception(f"Unsupported ROM format: {rom_path.suffix}. Cxbx-Reloaded requires .xbe or .iso files.")
         
         # Build command array with XBE path
+        # Validate the XBE file exists
+        if not xbe_path.exists():
+            raise Exception(f"XBE file not found: {xbe_path}")
+        
+        # Convert path to Windows format with forward slashes (Wine handles this better)
+        wine_xbe_path = str(xbe_path).replace('/', '\\')
+        
+        _logger.info(f"Launching XBE: {xbe_path}")
+        _logger.info(f"Windows path: Z:{wine_xbe_path}")
+        
         commandArray: list[str | Path] = [
             wine_runner.wine, 
             cxbxr_exe, 
             '/load', 
-            f'Z:{xbe_path}'
+            f'Z:{wine_xbe_path}'
         ]
         
         # Add debug command-line arguments if enabled
@@ -111,15 +121,21 @@ class CxbxrGenerator(Generator):
         debug_enabled = system.config.get_bool('cxbxr_debug', False)
         if debug_enabled:
             _logger.info("Adding debug command-line arguments")
+            # Ensure log directory exists
+            mkdir_if_not_exists(BATOCERA_LOGDIR)
+            wine_log_path = str(BATOCERA_LOGDIR / "cxbx-kernel-debug.log").replace('/', '\\')
             commandArray.extend([
                 '/dm', '1',  # Debug mode: 1=file, 2=console, 3=file+console
-                '/df', f'Z:{BATOCERA_LOGDIR / "cxbx-kernel-debug.log"}'
+                '/df', f'Z:{wine_log_path}'
             ])
+            _logger.info(f"Debug log will be written to: {BATOCERA_LOGDIR / 'cxbx-kernel-debug.log'}")
+            _logger.info(f"Wine path for debug log: Z:{wine_log_path}")
         
         environment = wine_runner.get_environment()
         environment.update({
             'SDL_GAMECONTROLLERCONFIG': generate_sdl_game_controller_config(playersControllers),
             'SDL_JOYSTICK_HIDAPI': '0',
+            'WINEDEBUG': '-all',  # Suppress Wine debug messages
         })
         
         if Path('/var/tmp/nvidia.prime').exists():
