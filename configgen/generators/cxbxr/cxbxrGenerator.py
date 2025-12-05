@@ -96,12 +96,25 @@ class CxbxrGenerator(Generator):
         else:
             raise Exception(f"Unsupported ROM format: {rom_path.suffix}. Cxbx-Reloaded requires .xbe or .iso files.")
         
+        # Build command array with XBE path
         commandArray: list[str | Path] = [
             wine_runner.wine, 
             cxbxr_exe, 
             '/load', 
             f'Z:{xbe_path}'
         ]
+        
+        # Add debug command-line arguments if enabled
+        # Note: Debug settings MUST be passed via command-line, not just settings.ini
+        # The loader (cxbxr-ldr.exe) doesn't read settings.ini - only the emulator DLL does
+        # But debug logging is initialized before settings.ini is read, so we need CLI args
+        debug_enabled = system.config.get_bool('cxbxr_debug', False)
+        if debug_enabled:
+            _logger.info("Adding debug command-line arguments")
+            commandArray.extend([
+                '/dm', '1',  # Debug mode: 1=file, 2=console, 3=file+console
+                '/df', f'Z:{BATOCERA_LOGDIR / "cxbx-kernel-debug.log"}'
+            ])
         
         environment = wine_runner.get_environment()
         environment.update({
@@ -120,6 +133,13 @@ class CxbxrGenerator(Generator):
                 'VK_LAYER_PATH': '/usr/share/vulkan/explicit_layer.d'
             })
         
+        _logger.info(f"=== Cxbx-Reloaded Launch Configuration ===")
+        _logger.info(f"Executable: {cxbxr_exe}")
+        _logger.info(f"XBE path: {xbe_path}")
+        _logger.info(f"Settings file: {settings_file}")
+        _logger.info(f"Wine prefix: {wine_runner.bottle_dir}")
+        _logger.info(f"Full command: {' '.join(str(x) for x in commandArray)}")
+        _logger.info(f"WINEPREFIX: {environment.get('WINEPREFIX', 'NOT SET')}")
         _logger.debug(f"Cxbx-Reloaded command: {commandArray}")
         
         return self._wrap_with_cleanup(Command.Command(array=commandArray, env=environment))

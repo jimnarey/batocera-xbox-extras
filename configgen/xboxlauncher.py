@@ -96,9 +96,21 @@ def runCommand(command):
         try:
             out, err = proc.communicate()
             exitcode = proc.returncode
-            eslog.debug(out.decode())
+            
+            eslog.info(f"=== Emulator Process Completed ===")
+            eslog.info(f"Exit code: {exitcode}")
+            
+            if out:
+                eslog.info(f"=== STDOUT ===")
+                eslog.info(out.decode())
+            else:
+                eslog.info("No stdout output")
+                
             if err:
+                eslog.error(f"=== STDERR ===")
                 eslog.error(err.decode())
+            else:
+                eslog.info("No stderr output")
         except Exception as e:
             eslog.error(f"Emulator error: {e}")
     
