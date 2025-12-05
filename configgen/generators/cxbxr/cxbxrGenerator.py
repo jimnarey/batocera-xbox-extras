@@ -219,7 +219,8 @@ exit $EXIT_CODE
         
         # Use modern config API - get_bool returns True/False based on value
         # If the option is not set or is "false"/"0"/etc, this returns False
-        debug_enabled = system.config.get_bool('cxbxr_debug', default=False)
+        # Note: default is positional-only parameter, not keyword argument
+        debug_enabled = system.config.get_bool('cxbxr_debug', False)
         _logger.info(f"Debug mode enabled: {debug_enabled}")
         
         if debug_enabled:
