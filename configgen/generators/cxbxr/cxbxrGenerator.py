@@ -212,13 +212,28 @@ exit $EXIT_CODE
         for section in ['gui', 'core', 'video', 'audio', 'input-general']:
             if not config.has_section(section):
                 config.add_section(section)
-                        
-        if system.isOptSet('cxbxr_debug'):
-            debug_mode = '1' if system.getOptBoolean('cxbxr_debug') else '0'
-            config.set('gui', 'CxbxDebugMode', debug_mode)
+        
+        # Debug: log the value we're getting
+        debug_value = system.config.get('cxbxr_debug')
+        _logger.info(f"cxbxr_debug option value: {debug_value} (type: {type(debug_value).__name__})")
+        
+        # Use modern config API - get_bool returns True/False based on value
+        # If the option is not set or is "false"/"0"/etc, this returns False
+        debug_enabled = system.config.get_bool('cxbxr_debug', default=False)
+        _logger.info(f"Debug mode enabled: {debug_enabled}")
+        
+        if debug_enabled:
+            _logger.info("Enabling Cxbx-Reloaded debug logging")
+            config.set('gui', 'CxbxDebugMode', '0x1')
             config.set('gui', 'CxbxDebugLogFile', str(BATOCERA_LOGDIR / 'cxbx-gui-debug.log'))
-            config.set('core', 'KrnlDebugMode', debug_mode)
+            config.set('core', 'KrnlDebugMode', '0x1')
             config.set('core', 'KrnlDebugLogFile', str(BATOCERA_LOGDIR / 'cxbx-kernel-debug.log'))
+        else:
+            _logger.info("Debug mode disabled, using defaults")
+            config.set('gui', 'CxbxDebugMode', '0x0')
+            config.set('gui', 'CxbxDebugLogFile', '')
+            config.set('core', 'KrnlDebugMode', '0x0')
+            config.set('core', 'KrnlDebugLogFile', '')
         
         with settings_file.open('w') as configfile:
             config.write(configfile)
